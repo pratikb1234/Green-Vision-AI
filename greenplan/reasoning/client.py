@@ -99,7 +99,11 @@ def _balanced(text: str, start: int, open_c: str, close_c: str) -> Any:
         elif c == close_c:
             depth -= 1
             if depth == 0:
-                return json.loads(text[start : i + 1])
+                # strict=False: small local models routinely emit literal
+                # newlines/tabs INSIDE string values, which strict JSON
+                # rejects; the content is fine, so accept it rather than
+                # burning a repair re-ask on formatting.
+                return json.loads(text[start : i + 1], strict=False)
     raise ValueError("unbalanced JSON value in model reply")
 
 
@@ -413,7 +417,27 @@ class ReasoningModel:
         )
         return obj["lesson"].strip()
 
+    # Zones per recommend call. 0 = all in one generation. Small local models
+    # cannot reliably hold a 10-zone strict-JSON reply together (measured:
+    # repair-loop failure on CPU) — build_model sets 3 for local providers,
+    # which turns one fragile 2048-token generation into a few short, reliable
+    # ones. Hosted large models keep the single call.
+    chunk_zones: int = 0
+
     def recommend(
+        self, ranked_rows: list[dict[str, Any]], lessons: list[str]
+    ) -> list[dict[str, Any]]:
+        size = self.chunk_zones or len(ranked_rows)
+        out: list[dict[str, Any]] = []
+        for i in range(0, len(ranked_rows), size):
+            log.info(
+                "recommend: zones %d-%d of %d",
+                i + 1, min(i + size, len(ranked_rows)), len(ranked_rows),
+            )
+            out.extend(self._recommend_chunk(ranked_rows[i : i + size], lessons))
+        return out
+
+    def _recommend_chunk(
         self, ranked_rows: list[dict[str, Any]], lessons: list[str]
     ) -> list[dict[str, Any]]:
         given_order = [r["zone"] for r in ranked_rows]
@@ -595,7 +619,9 @@ def build_model(cfg: ModelCfg, mock: bool) -> Any:
             "using OpenVINO local model %s on %s (inference only, no network)",
             cfg.model_dir, cfg.device,
         )
-        return ReasoningModel(cfg, OpenVINOClient(cfg))
+        model = ReasoningModel(cfg, OpenVINOClient(cfg))
+        model.chunk_zones = 3  # small local model: short JSON replies only
+        return model
     if cfg.provider == "hybrid":
         # Numbers from the best numeric model we have EVIDENCE for, words from
         # the local LLM. Everything runs on this machine.
@@ -633,6 +659,8 @@ def build_model(cfg: ModelCfg, mock: bool) -> Any:
             )
         if numeric is None:
             numeric = MockModel()
-        return HybridModel(numeric, ReasoningModel(cfg, OpenVINOClient(cfg)))
+        llm = ReasoningModel(cfg, OpenVINOClient(cfg))
+        llm.chunk_zones = 3  # small local model: short JSON replies only
+        return HybridModel(numeric, llm)
     log.info("using %s model %s (inference only)", cfg.provider, cfg.name)
     return ReasoningModel(cfg)
