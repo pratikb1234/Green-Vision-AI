@@ -65,32 +65,85 @@ past a cutoff, seeing only history strictly before it; skill is measured
 against a Theil–Sen + seasonality baseline on the same tasks. Real 146-cell
 panel:
 
-| | Statistical forecaster (trend + season + memory) | Qwen2.5-1.5B INT4 (local LLM) | Trained MLP (`greenplan.forecast`) |
-|---|---|---|---|
-| MAE — AQI | **13.5** | 33.3 | 41.3 |
-| MAE — NDVI | **0.042** | 0.103 | 0.173 |
-| Skill vs baseline | **+0.075 → +0.084** | −0.385 → −0.333 | −1.41 |
-| `memory_helped` | true | false | n/a |
+| | Statistical forecaster (trend + season + memory) | Qwen2.5-1.5B INT4 (local LLM) | Trained MLP (`greenplan.forecast`) | Trained forest (`--model rf`, 200 trees) |
+|---|---|---|---|---|
+| MAE — AQI | **13.5** | 33.3 | 41.3 | 29.0 |
+| MAE — NDVI | **0.042** | 0.103 | 0.173 | 0.032 |
+| Skill vs baseline | **+0.075 → +0.084** | −0.385 → −0.333 | −1.41 | −0.50 |
+| `memory_helped` | true | false | n/a | n/a |
+| Train time (stock sklearn, M3 Pro) | — | — | 0.5–0.7 s | 0.4–1.1 s |
 
-**Read this before quoting any accuracy number.** A 1.5B model is *worse than
-a trend line* at numeric extrapolation, and no amount of prompting fixes that.
-A neural network trained on the panel is worse still — with 42 months of
-history, the residuals left by the robust baseline are dominated by city-wide
-shocks (weather, season anomalies) that repeat too few times to learn; a
-ridge probe on zone-relative residuals confirms there is no spatial signal
-hiding either (−0.03). The statistical forecaster's memory loop, by contrast,
-genuinely works: skill improves +0.05 from the first half of training to the
-second.
+**Read this before quoting any accuracy number.** Each contender's MAE is
+scored on its own held-out tasks, so MAEs are not comparable across columns —
+the forest's 0.032 NDVI does **not** beat the champion's 0.042. The
+comparable number is **skill**: model error vs the same Theil–Sen +
+seasonality baseline on the same tasks, and every trained challenger is
+negative. A 1.5B model is *worse than a trend line* at numeric extrapolation,
+and no amount of prompting fixes that. A neural network trained on the panel
+is worse still — with 42 months of history, the residuals left by the robust
+baseline are dominated by city-wide shocks (weather, season anomalies) that
+repeat too few times to learn; a ridge probe on zone-relative residuals
+confirms there is no spatial signal hiding either (−0.03). A 200-tree random
+forest on the identical residual task (`--model rf`) recovers most of the
+MLP's deficit — NDVI lands within noise of the baseline (−0.05) — but the
+combined score still loses to the trend line, so it is published here and
+benched by the same gate. The statistical forecaster's memory loop, by
+contrast, genuinely works: skill improves +0.05 from the first half of
+training to the second.
 
 So the **default provider is `hybrid`**: numbers from the measured champion,
 words — per-cell justifications, species picks with soil fit, projection
 caveats — from the local LLM, which produced 0 malformed replies in 30
 iterations at exactly that job. Champion selection is re-checked from
 evidence on every run: `python -m greenplan.forecast.train` scores a trained
-challenger on held-out months and writes its report; the day a longer panel
-lets it report positive skill, `hybrid` deploys it automatically — the
-challenger harness (ONNX export, OpenVINO inference, `CPU`/`GPU`/`NPU` via
-the same `model.device` knob) is production-ready and waiting for data.
+challenger (the MLP, or a random forest with `--model rf`) on held-out months
+and writes its report; the day a longer panel lets one report positive skill,
+`hybrid` deploys it automatically — the challenger harness (ONNX export,
+OpenVINO inference with measured sklearn parity, `CPU`/`GPU`/`NPU` via the
+same `model.device` knob) is production-ready and waiting for data.
+
+Two measured notes on that harness. skl2onnx converts a forest to a single
+`ai.onnx.ml.TreeEnsembleRegressor` op, which OpenVINO's ONNX frontend cannot
+convert ("No conversion rule found", 2026.3) — so `onnx_trees.py` lowers the
+fitted trees to standard ONNX ops (Gather/Where/ReduceMean) that every
+OpenVINO device executes. And on ARM Macs OpenVINO's CPU plugin defaults to
+f16 inference, which flips tree splits near a threshold (measured: 0.05 max
+error); both the trainer and `OVForecaster` pin f32, after which the exported
+graphs match sklearn to 2.1e-07 (forest) and 9.5e-07 (MLP) on the held-out
+set — the parity number is re-measured and written into `report.json` on
+every training run.
+
+### Intel Extension for Scikit-learn: measured, not assumed
+
+The trainer takes `--intel`, which calls `sklearnex.patch_sklearn()` before
+any sklearn import so accelerated estimators dispatch to Intel oneDAL, and
+`report.json` records whether the patch was actually active next to the
+measured train time — re-running the same command with and without the flag
+*is* the acceleration measurement:
+
+```bash
+python -m greenplan.forecast.train --config config/city.yaml --model rf
+python -m greenplan.forecast.train --config config/city.yaml --model rf --intel
+```
+
+What we can state honestly today:
+
+- **The MLP challenger gains nothing from sklearnex by design.**
+  `MLPRegressor` is not on the extension's accelerated-estimator list (no
+  neural network is — checked against the sklearnex 2026.1 docs), so for
+  `--model mlp` the patch is a documented no-op. That is exactly why the
+  forest challenger exists: `RandomForestRegressor` **is** on the list, so
+  `--model rf --intel` exercises oneDAL for real.
+- **The timings in the table are stock scikit-learn.** This repo's dev
+  machine is an Apple-Silicon Mac, and scikit-learn-intelex ships wheels for
+  Windows/Linux x86_64 (Python ≤ 3.13) only — `pip install
+  scikit-learn-intelex` here returns "No matching distribution found"
+  (measured, recorded in `requirements.txt`). The `--intel` flag logs that
+  and falls back to stock sklearn rather than pretending. An
+  oneDAL-accelerated timing requires the same two commands on an Intel
+  x86_64 machine; until someone runs them, no speedup number is claimed —
+  and at about a second of stock train time on this panel there is little to
+  accelerate anyway. The flag will matter, if ever, on a much longer panel.
 
 ### Compress a model yourself (NNCF)
 

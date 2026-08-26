@@ -64,8 +64,13 @@ class OVForecaster:
         core = ov.Core()
         self.compiled: dict[str, Any] = {}
         for m in METRICS:
+            # f32 pinned: ARM CPU plugins default to f16 inference, which
+            # flips tree-split comparisons on values near a threshold
+            # (measured: 0.05 max error on a random forest). The nets are
+            # tiny; precision costs nothing here.
             self.compiled[m] = core.compile_model(
-                core.read_model(str(d / f"{m}.onnx")), device
+                core.read_model(str(d / f"{m}.onnx")), device,
+                {"INFERENCE_PRECISION_HINT": "f32"},
             )
         log.info(
             "trained forecaster loaded from %s on %s (test skill vs baseline: %s)",

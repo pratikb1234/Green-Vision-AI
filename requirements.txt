@@ -12,8 +12,13 @@ requests>=2.31
 openvino-genai>=2024.4
 huggingface_hub>=0.24
 
-# --- optional: train/score the numeric challenger (greenplan.forecast) ----
+# --- optional: train/score the numeric challengers (greenplan.forecast) ---
 # Only needed to run `python -m greenplan.forecast.train`; the hybrid
 # provider itself needs nothing beyond openvino (bundled with openvino-genai).
 # scikit-learn>=1.4
 # skl2onnx>=1.17
+# scikit-learn-intelex   # optional, for --intel (Intel oneDAL dispatch).
+#                        # Wheels exist for Windows/Linux x86_64 on
+#                        # Python <= 3.13 ONLY — on an Apple-Silicon Mac pip
+#                        # reports "No matching distribution found" (measured;
+#                        # see the README's sklearnex section).
