@@ -1,13 +1,22 @@
 """Reasoning models.
 
-* OpenRouterModel — DeepSeek via OpenRouter's OpenAI-compatible
-  chat-completions endpoint. Inference ONLY: nothing here trains or
-  fine-tunes the model; all "learning" happens in the prompt via the memory
-  store. Key comes from the OPENROUTER_API_KEY env var, never hard-coded.
+One interface — `predict` / `lesson` / `recommend` — over three very different
+back ends. Inference ONLY, in every case: nothing here trains or fine-tunes
+anything. All "learning" happens in the prompt, via the memory store.
+
+* OpenVINOClient — LOCAL inference on Intel's OpenVINO runtime. The weights
+  sit on disk in OpenVINO IR compressed to INT4, so a 1.5B instruct model
+  loads in seconds and answers on an ordinary CPU with no GPU, no API key and
+  no network. This is the default: it is what lets the whole pipeline run on
+  free public data with no paid service anywhere in it, and it keeps every
+  figure about a city on the machine that is planning that city.
+* OpenRouterClient — a hosted chat-completions endpoint (OpenRouter or NVIDIA
+  NIM), for when a larger model is worth the round trip. Key comes from an
+  env var, never hard-coded.
 * MockModel — a fully offline stand-in (used by --mock) that fills the same
   role numerically: trend + seasonal extrapolation, bias-corrected using the
   retrieved memory records. It exercises the exact same pipeline, including
-  genuine use of memory, at zero cost.
+  genuine use of memory, at zero cost and with no model at all.
 """
 
 from __future__ import annotations
@@ -17,6 +26,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
@@ -50,14 +60,28 @@ PROVIDERS: dict[str, dict[str, str]] = {
 }
 
 
-def extract_json(text: str) -> dict[str, Any]:
+def extract_json(text: str, allow_list: bool = False) -> Any:
     """Strict-JSON parsing that tolerates the usual LLM wrapping: reasoning
-    tags, code fences, and prose around the object."""
+    tags, code fences, and prose around the object.
+
+    With allow_list, a top-level ARRAY is also accepted. Small local models
+    routinely emit the inner list and drop the wrapper object; the caller
+    re-wraps it under the key the schema expects rather than throwing away
+    an otherwise-correct answer."""
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     text = re.sub(r"```(?:json)?", "", text)
+    if allow_list:
+        obj_at, arr_at = text.find("{"), text.find("[")
+        if arr_at != -1 and (obj_at == -1 or arr_at < obj_at):
+            return _balanced(text, arr_at, "[", "]")
     start = text.find("{")
     if start == -1:
         raise ValueError("no JSON object found in model reply")
+    return _balanced(text, start, "{", "}")
+
+
+def _balanced(text: str, start: int, open_c: str, close_c: str) -> Any:
+    """Return the first balanced JSON value starting at `start`."""
     depth, in_str, esc = 0, False, False
     for i in range(start, len(text)):
         c = text[i]
@@ -70,13 +94,13 @@ def extract_json(text: str) -> dict[str, Any]:
                 in_str = False
         elif c == '"':
             in_str = True
-        elif c == "{":
+        elif c == open_c:
             depth += 1
-        elif c == "}":
+        elif c == close_c:
             depth -= 1
             if depth == 0:
                 return json.loads(text[start : i + 1])
-    raise ValueError("unbalanced JSON object in model reply")
+    raise ValueError("unbalanced JSON value in model reply")
 
 
 def _require_number(obj: dict[str, Any], key: str) -> float:
@@ -199,7 +223,10 @@ class OpenRouterClient:
         system: str,
         user: str,
         validate: Callable[[dict[str, Any]], None] | None = None,
+        list_key: str | None = None,
     ) -> dict[str, Any]:
+        # list_key is accepted for interface parity with OpenVINOClient; hosted
+        # models honour response_format and return the wrapper object already.
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -236,11 +263,135 @@ class OpenRouterClient:
         raise OpenRouterError(f"model never produced valid JSON: {last_err}")
 
 
-class OpenRouterModel:
-    """DeepSeek-backed implementation of the reasoning interface."""
+class OpenVINOClient:
+    """Local inference through Intel's OpenVINO runtime — same `chat_json`
+    contract as OpenRouterClient, so every model class above works unchanged.
+
+    The weights live on disk in OpenVINO IR, compressed to INT4. That is what
+    makes a 1.5B instruct model practical on an ordinary CPU: ~1 GB on disk
+    instead of ~3 GB at FP16, a couple of seconds to load, and a few seconds
+    per reply with no GPU. Nothing leaves the machine and there is no API key,
+    which is what lets the whole pipeline run on free public data alone.
+
+    `device` is passed straight to OpenVINO, so the same build targets CPU,
+    an integrated GPU, or an NPU without any code change.
+    """
+
+    # Prompt formats for the instruct models OpenVINO ships pre-converted.
+    _TEMPLATES = {
+        "chatml": (
+            "<|im_start|>system\n{system}<|im_end|>\n"
+            "<|im_start|>user\n{user}<|im_end|>\n"
+            "<|im_start|>assistant\n"
+        ),
+        "llama3": (
+            "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system}<|eot_id|>"
+            "<|start_header_id|>user<|end_header_id|>\n\n{user}<|eot_id|>"
+            "<|start_header_id|>assistant<|end_header_id|>\n\n"
+        ),
+    }
 
     def __init__(self, cfg: ModelCfg) -> None:
-        self.client = OpenRouterClient(cfg)
+        try:
+            import openvino_genai  # noqa: PLC0415
+        except ImportError as exc:  # pragma: no cover - depends on install
+            raise OpenRouterError(
+                "provider 'openvino' needs the OpenVINO runtime. Install it with:\n"
+                "    pip install openvino-genai huggingface_hub\n"
+                "then fetch a pre-compressed model with:\n"
+                "    python scripts/fetch_openvino_model.py"
+            ) from exc
+
+        self._genai = openvino_genai
+        self.cfg = cfg
+
+        model_dir = Path(cfg.model_dir)
+        if not model_dir.is_absolute():
+            model_dir = Path.cwd() / model_dir
+        if not (model_dir / "openvino_model.xml").exists():
+            raise OpenRouterError(
+                f"no OpenVINO model at {model_dir}. Fetch one with:\n"
+                "    python scripts/fetch_openvino_model.py"
+            )
+
+        log.info("loading OpenVINO model %s on %s", model_dir.name, cfg.device)
+        t0 = time.time()
+        self.pipe = openvino_genai.LLMPipeline(str(model_dir), cfg.device)
+        log.info("OpenVINO pipeline ready in %.1fs", time.time() - t0)
+
+    def _render(self, system: str, user: str) -> str:
+        name = self.cfg.chat_template
+        if name == "tokenizer":
+            try:
+                return self.pipe.get_tokenizer().apply_chat_template(
+                    [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+                    add_generation_prompt=True,
+                )
+            except Exception:  # tokenizer ships no template — fall back
+                name = "chatml"
+        return self._TEMPLATES.get(name, self._TEMPLATES["chatml"]).format(
+            system=system, user=user
+        )
+
+    def _generate(self, system: str, user: str) -> str:
+        gen = self._genai.GenerationConfig()
+        gen.max_new_tokens = self.cfg.max_new_tokens
+        # Greedy decoding at temperature 0 — strict-JSON output is a parsing
+        # task, not a creative one, and sampling only adds failure modes.
+        if self.cfg.temperature > 0:
+            gen.do_sample = True
+            gen.temperature = self.cfg.temperature
+        else:
+            gen.do_sample = False
+        return str(self.pipe.generate(self._render(system, user), gen))
+
+    def chat_json(
+        self,
+        system: str,
+        user: str,
+        validate: Callable[[dict[str, Any]], None] | None = None,
+        list_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Mirrors OpenRouterClient.chat_json, including the re-ask loop. A
+        small local model needs that loop more often than a hosted one, which
+        is exactly why it lives in both clients.
+
+        `list_key` names the single array the schema expects. A small model
+        very often returns that array bare, dropping the wrapper object; when
+        it does, we re-wrap rather than discard a correct answer."""
+        last_err = "no attempt made"
+        sys_prompt, usr_prompt = system, user
+        for _ in range(self.cfg.json_repair_attempts):
+            text = self._generate(sys_prompt, usr_prompt)
+            try:
+                obj = extract_json(text, allow_list=list_key is not None)
+                if isinstance(obj, list):
+                    obj = {list_key: obj}
+                if validate:
+                    validate(obj)
+                return obj
+            except (ValueError, json.JSONDecodeError) as exc:
+                last_err = str(exc)
+                log.warning("invalid JSON from local model (%s); re-asking", last_err)
+                usr_prompt = (
+                    f"{user}\n\n---\nYour previous reply was invalid: {last_err}\n"
+                    "Reply again with STRICT JSON only, exactly matching the schema "
+                    "in the system message. No prose, no code fences, no commentary."
+                )
+        raise OpenRouterError(f"local model never produced valid JSON: {last_err}")
+
+
+class ReasoningModel:
+    """The reasoning interface, over any client exposing `chat_json`.
+
+    Identical behaviour whether the tokens come from a hosted endpoint or from
+    OpenVINO on this machine — swapping `model.provider` in the config changes
+    where inference happens and nothing else.
+    """
+
+    def __init__(self, cfg: ModelCfg, client: Any | None = None) -> None:
+        self.client = client if client is not None else OpenRouterClient(cfg)
 
     def predict(self, ctx: dict[str, Any]) -> dict[str, float]:
         def _validate(obj: dict[str, Any]) -> None:
@@ -285,6 +436,7 @@ class OpenRouterModel:
             prompts.RECOMMEND_SYSTEM,
             prompts.recommend_user(ranked_rows, lessons, kb_markdown_table()),
             _validate,
+            list_key="zones",
         )
         by_zone = {z["zone"]: z for z in obj["zones"]}
         out = []
@@ -430,9 +582,19 @@ class MockModel:
         )
 
 
+# Back-compat: this class was OpenRouter-only before local inference existed.
+OpenRouterModel = ReasoningModel
+
+
 def build_model(cfg: ModelCfg, mock: bool) -> Any:
     if mock or cfg.provider == "mock":
         log.info("using MockModel (offline, no API key, no cost)")
         return MockModel()
+    if cfg.provider == "openvino":
+        log.info(
+            "using OpenVINO local model %s on %s (inference only, no network)",
+            cfg.model_dir, cfg.device,
+        )
+        return ReasoningModel(cfg, OpenVINOClient(cfg))
     log.info("using %s model %s (inference only)", cfg.provider, cfg.name)
-    return OpenRouterModel(cfg)
+    return ReasoningModel(cfg)

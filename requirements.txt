@@ -3,3 +3,11 @@ pandas>=2.1
 h3>=3.7
 PyYAML>=6.0
 requests>=2.31
+
+# --- local inference (provider: openvino) --------------------------------
+# Runs a weight-compressed INT4 instruct model on the CPU, so the engine
+# needs no API key, no network and no per-token cost. Fetch a model with
+# scripts/fetch_openvino_model.py. Omit these two only if you intend to
+# run --mock or a hosted provider exclusively.
+openvino-genai>=2024.4
+huggingface_hub>=0.24

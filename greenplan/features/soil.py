@@ -144,7 +144,18 @@ def load_soil(
     if soilgrids_csv:
         path = Path(soilgrids_csv)
         if not path.exists():
-            raise FileNotFoundError(f"SoilGrids CSV not found: {path}")
+            # Soil is enrichment, not a dependency: a run without it still
+            # ranks and still picks species, just on pollution load alone.
+            # Export it with scripts/soilgrids_export.py.
+            log.warning(
+                "SoilGrids CSV not found (%s) - continuing without soil. "
+                "Species will be matched on pollution tolerance only; "
+                "generate it with scripts/soilgrids_export.py",
+                path,
+            )
+            path = None
+
+    if soilgrids_csv and path is not None:
         df = _load_prop_csv(path, resolution)
         cols = {c: c for c in ("phh2o", "ph", "soc", "nitrogen", "sand", "silt", "clay") if c in df.columns}
         for cell, g in df.groupby("cell"):

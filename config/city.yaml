@@ -55,8 +55,13 @@ sites:
 soil:
   # SoilGrids 250 m (modelled pH/texture/carbon) + NASA SMAP (measured moisture).
   # Species selection respects soil pH and texture when these are supplied.
-  # soilgrids_csv: data/ahmedabad_soilgrids.csv
-  # moisture_csv: data/ahmedabad_smap.csv
+  # REAL soil — free, no key (ISRIC SoilGrids v2.0). Refresh with:
+  #   python scripts/soilgrids_export.py --config config/city.yaml   #     --out data/ahmedabad_soilgrids.csv
+  # SoilGrids masks built-up land, so cells in the dense core are recovered by
+  # re-sampling offsets around the centre; a few may still come back empty and
+  # simply fall through to pollution-only species matching.
+  soilgrids_csv: data/ahmedabad_soilgrids.csv
+  # moisture_csv: data/ahmedabad_smap.csv   # NASA SMAP needs an Earthdata login
 
 training:
   iterations: 60            # backtest (zone, cutoff) samples per training run
@@ -89,7 +94,16 @@ mcda:
   top_n: 10
 
 model:
-  provider: nvidia              # openrouter | nvidia | mock  (--mock forces mock)
+  # LOCAL by default. Intel OpenVINO runs a weight-compressed INT4 instruct
+  # model on the CPU: no API key, no per-token cost, no network, and no city
+  # figures leaving the machine that is planning that city. Fetch the model:
+  #   python scripts/fetch_openvino_model.py
+  provider: openvino            # openvino | openrouter | nvidia | mock
+  model_dir: models/openvino/qwen2.5-1.5b-instruct-int4-ov
+  chat_template: chatml
+  device: CPU                   # CPU | GPU | NPU | AUTO — any OpenVINO device
+  max_new_tokens: 2048          # 10 zones of justification + species needs room
+  # Used only by the hosted providers below; ignored when provider: openvino.
   name: meta/llama-3.1-70b-instruct
   # Verified fast + reliable on this account. Other options on the endpoint:
   #   z-ai/glm-5.2                   (throttled to no-token at test time — avoid)

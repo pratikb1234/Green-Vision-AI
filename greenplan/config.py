@@ -92,7 +92,7 @@ class MCDACfg:
 
 @dataclass
 class ModelCfg:
-    provider: str = "openrouter"  # openrouter | nvidia | mock
+    provider: str = "openrouter"  # openrouter | nvidia | openvino | mock
     name: str = "deepseek/deepseek-chat"
     # Empty -> use the provider's default endpoint (see PROVIDERS in client.py).
     base_url: str = ""
@@ -103,6 +103,18 @@ class ModelCfg:
     # Stream tokens (SSE). Recommended for slow reasoning models (e.g. NVIDIA
     # NIM glm/deepseek) so the per-chunk read timeout replaces one long wait.
     stream: bool = False
+
+    # --- provider: openvino -------------------------------------------------
+    # Local inference through Intel's OpenVINO runtime. No API key, no network,
+    # no per-token cost: the weights sit on disk in OpenVINO IR, compressed to
+    # INT4 so a 1.5B model runs on an ordinary CPU.
+    model_dir: str = "models/openvino/qwen2.5-1.5b-instruct-int4-ov"
+    device: str = "CPU"           # CPU | GPU | NPU | AUTO — any OpenVINO device
+    max_new_tokens: int = 2048
+    # Chat template. "chatml" suits Qwen/Yi/most OpenVINO-converted instruct
+    # models; "llama3" suits Llama-3.x; "tokenizer" defers to the model's own
+    # template when the bundled tokenizer ships one.
+    chat_template: str = "chatml"
 
 
 @dataclass
