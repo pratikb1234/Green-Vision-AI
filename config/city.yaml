@@ -53,6 +53,22 @@ sites:
   candidates_csv: data/ahmedabad_sites.csv
   min_patch_m2: 100          # ignore patches smaller than one 10 m pixel
   max_sites_per_zone: 15
+  # Land-cover site filter: low NDVI is also water, rock and flat roofs, so a
+  # classifier trained on ESA WorldCover 2021 labels (ONNX, executed by
+  # OpenVINO) says which candidates are really plantable ground. Train it:
+  #   python scripts/train_landcover.py --config config/city.yaml --tile 42QZL
+  # then add the columns to the sites CSV:
+  #   python scripts/sentinel2_ndvi_export.py --config config/city.yaml \
+  #     --out-sites data/ahmedabad_sites.csv --classify-sites \
+  #     --scene-id S2A_42QZL_20260607_0_L2A
+  # Its flags are honoured ONLY if it clears BOTH gates: report.json must show
+  # it beating the NDVI-threshold baseline on spatially held-out ground, AND
+  # site_audit.json must show it still agreeing with its own labels on the
+  # candidate sites themselves. On the shipped Ahmedabad data it passes the
+  # first and fails the second, so it is benched with its score, like the
+  # forecast challenger. Flagged sites are always kept and marked, never
+  # silently dropped. See the README for the measured numbers.
+  landcover_dir: models/{city}/landcover
   # "temporal plantability" thresholds on the NDVI stack — CALIBRATE to ground
   ndvi_ever_green: 0.25
   ndvi_never_green: 0.15
