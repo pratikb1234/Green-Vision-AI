@@ -17,3 +17,9 @@ huggingface_hub>=0.24
 # provider itself needs nothing beyond openvino (bundled with openvino-genai).
 # scikit-learn>=1.4
 # skl2onnx>=1.17
+
+# --- optional: build the Geti canopy training set -------------------------
+# Only needed to run `python scripts/geti_export_tiles.py`, which decodes
+# Esri World Imagery tiles (JPEG) before re-saving them as PNG. The engine
+# and the studio never import it. See docs/intel/geti-canopy-runbook.md.
+# Pillow>=10.0
