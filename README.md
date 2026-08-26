@@ -58,30 +58,66 @@ $env:NVIDIA_API_KEY="..."        # Linux/macOS: export NVIDIA_API_KEY=...
 Set `model.provider` to `nvidia` (NIM, `meta/llama-3.1-70b-instruct`) or
 `openrouter`. Keys are read from the environment and never hard-coded.
 
-### Measured: local model vs. the naive baseline
+### Measured: the numeric model bake-off
 
-30 backtest iterations, 12-month horizon, on the real 146-cell panel:
+Same held-out task for every contender — predict a cell's metrics 12 months
+past a cutoff, seeing only history strictly before it; skill is measured
+against a Theil–Sen + seasonality baseline on the same tasks. Real 146-cell
+panel:
 
-| | Qwen2.5-1.5B INT4 (local) | Offline stand-in (Theil–Sen + seasonality) |
-|---|---|---|
-| MAE — AQI | 33.3 | **13.5** |
-| MAE — NDVI | 0.103 | **0.042** |
-| Skill vs baseline | **−0.385 → −0.333** | +0.075 → +0.084 |
-| `memory_helped` | false | true |
-| Malformed JSON replies | 0 / 30 | n/a |
+| | Statistical forecaster (trend + season + memory) | Qwen2.5-1.5B INT4 (local LLM) | Trained MLP (`greenplan.forecast`) |
+|---|---|---|---|
+| MAE — AQI | **13.5** | 33.3 | 41.3 |
+| MAE — NDVI | **0.042** | 0.103 | 0.173 |
+| Skill vs baseline | **+0.075 → +0.084** | −0.385 → −0.333 | −1.41 |
+| `memory_helped` | true | false | n/a |
 
 **Read this before quoting any accuracy number.** A 1.5B model is *worse than
-a trend line* at numeric extrapolation, and no amount of prompting fixes that —
-it is the wrong tool for the regression half of the task. What it does do
-reliably is produce well-formed output (0 repairs needed in 30 iterations) and
-write the per-cell justification and species picks, which is the half a
-language model is actually good at. Its memory loop does work — skill improves
-+0.052 from the first half of training to the second — it simply starts from
-too far behind to overtake the baseline.
+a trend line* at numeric extrapolation, and no amount of prompting fixes that.
+A neural network trained on the panel is worse still — with 42 months of
+history, the residuals left by the robust baseline are dominated by city-wide
+shocks (weather, season anomalies) that repeat too few times to learn; a
+ridge probe on zone-relative residuals confirms there is no spatial signal
+hiding either (−0.03). The statistical forecaster's memory loop, by contrast,
+genuinely works: skill improves +0.05 from the first half of training to the
+second.
 
-If you need the ranking to be as accurate as possible, run a hosted model. If
-you need it to run anywhere, for free, with nothing leaving the machine, run
-OpenVINO. That trade is real and this table is the honest version of it.
+So the **default provider is `hybrid`**: numbers from the measured champion,
+words — per-cell justifications, species picks with soil fit, projection
+caveats — from the local LLM, which produced 0 malformed replies in 30
+iterations at exactly that job. Champion selection is re-checked from
+evidence on every run: `python -m greenplan.forecast.train` scores a trained
+challenger on held-out months and writes its report; the day a longer panel
+lets it report positive skill, `hybrid` deploys it automatically — the
+challenger harness (ONNX export, OpenVINO inference, `CPU`/`GPU`/`NPU` via
+the same `model.device` knob) is production-ready and waiting for data.
+
+### Compress a model yourself (NNCF)
+
+`fetch_openvino_model.py` downloads models Intel already compressed. To do
+the compression locally — any Hugging Face instruct model → INT4 OpenVINO IR
+via Intel's NNCF — use:
+
+```bash
+pip install "optimum[openvino]"
+python scripts/compress_model_nncf.py --base Qwen/Qwen2.5-0.5B-Instruct --verify
+```
+
+Measured on this repo: Qwen2.5-0.5B FP16 → INT4 in 292 s on a laptop CPU,
+343 MB on disk, loads and answers in ~6 s. No Intel hardware is needed to
+*run* the compression; the result runs on any OpenVINO device.
+
+### Benchmark every OpenVINO device on this machine
+
+```bash
+python scripts/bench_devices.py
+```
+
+Enumerates the devices the runtime can see, loads the same model on each, and
+prints load time, time-to-first-token, throughput, and whether the reply
+parsed as strict JSON. On a plain laptop that is one CPU row; on an Intel
+Core Ultra "AI PC" the same command benchmarks the integrated GPU and NPU
+with zero code changes — `model.device` passes straight through.
 
 ### What a run does
 
@@ -143,17 +179,57 @@ their centre; the exporter re-samples four offsets around each miss and
 recovers most of them. Whatever is still empty falls through to pollution-only
 matching rather than inventing a value.
 
+### Sentinel-2 at 10 m: where inside a cell
+
+MODIS (250 m) is the temporal backbone — long, keyless, pre-composited. What
+it cannot say is where INSIDE a ~5 km² priority cell the bare ground actually
+is. `scripts/sentinel2_ndvi_export.py` adds that: true NDVI (near-infrared vs
+red) from the most recent cloud-free **Sentinel-2 L2A** scene at **10 m**,
+via AWS's Earth Search STAC API — still no key, still free.
+
+```bash
+python scripts/sentinel2_ndvi_export.py --config config/city.yaml \
+    --out-cells data/ahmedabad_s2_ndvi.csv --out-sites data/ahmedabad_sites.csv
+```
+
+`--out-sites` writes the lowest-NDVI 10 m ground per cell as candidate
+planting sites; `sites.candidates_csv` in the config points at it, replacing
+the `1 - NDVI` proxy with measured bare ground (measured for Ahmedabad:
+2,190 candidates from a 3.9 %-cloud scene). Honest limits, in the file
+header itself: one scene is a snapshot, not a composite, and low NDVI can be
+water/rock/roofs at scene time — candidates for a human to verify, not a
+survey. The two-scale rule: **MODIS answers "how is this cell changing",
+Sentinel-2 answers "where in it is the ground".**
+
+### A second city is one config file
+
+Everything downstream of `config/<city>.yaml` is city-agnostic. Standing up
+Delhi:
+
+```bash
+# copy config/city.yaml -> config/delhi.yaml, change name + bbox + csv paths
+python scripts/openmeteo_aqi_export.py  --config config/delhi.yaml --start 2023-01 --end 2026-06 --out data/delhi_aqi.csv
+python scripts/soilgrids_export.py      --config config/delhi.yaml --out data/delhi_soilgrids.csv
+python scripts/modis_ndvi_export.py     --config config/delhi.yaml --start 2023-01 --end 2026-06 --out data/delhi_ndvi.csv
+python scripts/sentinel2_ndvi_export.py --config config/delhi.yaml --out-sites data/delhi_sites.csv
+python -m greenplan run --config config/delhi.yaml --recommend
+```
+
+Every data source is global (NASA, Open-Meteo, SoilGrids, OSM, Sentinel-2),
+so this recipe works for any city on Earth with a bounding box — and each
+city's `run` backtests itself, so each city ships with its own measured
+skill, never Ahmedabad's borrowed one.
+
 ### Still not wired up
 
 - **Soil moisture.** `soil.moisture_csv` stays commented out: NASA SMAP needs
   an Earthdata login, which breaks the no-key property.
-- **Bare-ground site finder.** `sites.enabled: true` but `candidates_csv` is
-  commented out, so it falls back to the `1 - NDVI` plantable proxy and emits no
-  `planting_sites.geojson`.
 - **10 years of history.** Not possible from free keyless sources. Open-Meteo's
   air-quality archive returns nothing before **2023-01** (verified back to
   2013), which caps the panel at 42 months regardless of how far MODIS goes
-  back. Any claim of a decade of data is wrong.
+  back. Any claim of a decade of data is wrong. (Sentinel-2's archive reaches
+  2015 but needs cloud compositing per month — the honest route to a longer
+  panel, not yet built.)
 
 ---
 

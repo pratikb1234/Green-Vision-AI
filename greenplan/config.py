@@ -92,7 +92,7 @@ class MCDACfg:
 
 @dataclass
 class ModelCfg:
-    provider: str = "openrouter"  # openrouter | nvidia | openvino | mock
+    provider: str = "openrouter"  # openrouter | nvidia | openvino | hybrid | mock
     name: str = "deepseek/deepseek-chat"
     # Empty -> use the provider's default endpoint (see PROVIDERS in client.py).
     base_url: str = ""
@@ -115,6 +115,12 @@ class ModelCfg:
     # models; "llama3" suits Llama-3.x; "tokenizer" defers to the model's own
     # template when the bundled tokenizer ships one.
     chat_template: str = "chatml"
+
+    # --- provider: hybrid ---------------------------------------------------
+    # Numbers from a TRAINED network (ONNX, executed by OpenVINO on `device`),
+    # words (justifications, species, caveats) from the local language model.
+    # Train the network first:  python -m greenplan.forecast.train
+    forecaster_dir: str = "models/{city}/forecaster"
 
 
 @dataclass
@@ -183,4 +189,5 @@ def load_config(path: str | Path) -> Config:
     slug = re.sub(r"[^a-z0-9]+", "-", cfg.city.name.lower()).strip("-") or "city"
     cfg.training.memory_path = cfg.training.memory_path.replace("{city}", slug)
     cfg.run.outputs_dir = cfg.run.outputs_dir.replace("{city}", slug)
+    cfg.model.forecaster_dir = cfg.model.forecaster_dir.replace("{city}", slug)
     return cfg

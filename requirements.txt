@@ -11,3 +11,9 @@ requests>=2.31
 # run --mock or a hosted provider exclusively.
 openvino-genai>=2024.4
 huggingface_hub>=0.24
+
+# --- optional: train/score the numeric challenger (greenplan.forecast) ----
+# Only needed to run `python -m greenplan.forecast.train`; the hybrid
+# provider itself needs nothing beyond openvino (bundled with openvino-genai).
+# scikit-learn>=1.4
+# skl2onnx>=1.17

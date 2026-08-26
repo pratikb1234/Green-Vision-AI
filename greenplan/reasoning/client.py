@@ -596,5 +596,43 @@ def build_model(cfg: ModelCfg, mock: bool) -> Any:
             cfg.model_dir, cfg.device,
         )
         return ReasoningModel(cfg, OpenVINOClient(cfg))
+    if cfg.provider == "hybrid":
+        # Numbers from the best numeric model we have EVIDENCE for, words from
+        # the local LLM. Everything runs on this machine.
+        #
+        # Champion selection is empirical, not aspirational: a trained network
+        # (greenplan.forecast) is deployed only if its held-out test report
+        # shows it actually beating the statistical forecaster's baseline.
+        # On the shipped 42-month panel it does not — trend + seasonality +
+        # memory correction remains the measured champion — so that is what
+        # runs, and the trained challenger stays on the bench with its score.
+        from ..forecast import HybridModel, OVForecaster  # noqa: PLC0415
+
+        numeric: Any = None
+        try:
+            challenger = OVForecaster(cfg.forecaster_dir, cfg.device)
+            skill = float(
+                challenger.norm.get("report", {}).get("skill_combined", -1.0)
+            )
+            if skill > 0:
+                log.info(
+                    "hybrid numeric: trained network (held-out skill %+.3f > 0) on %s",
+                    skill, cfg.device,
+                )
+                numeric = challenger
+            else:
+                log.info(
+                    "hybrid numeric: trained challenger LOSES to the baseline "
+                    "(held-out skill %+.3f) — deploying the statistical "
+                    "forecaster instead", skill,
+                )
+        except RuntimeError:
+            log.info(
+                "hybrid numeric: no trained challenger at %s — statistical "
+                "forecaster", cfg.forecaster_dir,
+            )
+        if numeric is None:
+            numeric = MockModel()
+        return HybridModel(numeric, ReasoningModel(cfg, OpenVINOClient(cfg)))
     log.info("using %s model %s (inference only)", cfg.provider, cfg.name)
     return ReasoningModel(cfg)

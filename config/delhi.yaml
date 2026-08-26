@@ -2,9 +2,9 @@
 # Every knob the pipeline uses lives here; CLI flags override these values.
 
 city:
-  name: Ahmedabad
+  name: Delhi
   # bbox = [lon_min, lat_min, lon_max, lat_max]
-  bbox: [72.45, 22.90, 72.70, 23.15]
+  bbox: [77.00, 28.45, 77.35, 28.80]
 
 grid:
   # Uber H3 resolution used as the common analysis grid. Res 7 (~5 km² cells,
@@ -28,15 +28,15 @@ adapters:
   # SAME H3 res-7 grid (zone = cell id) so they overlap cell-for-cell.
   # REAL NDVI — free, no key (NASA MOD13Q1 250m via ORNL DAAC). Refresh with:
   #   python scripts/modis_ndvi_export.py --config config/city.yaml \
-  #     --start 2023-01 --end 2026-06 --out data/ahmedabad_ndvi.csv
-  green_cover: "csv:data/ahmedabad_ndvi.csv"
+  #     --start 2023-01 --end 2026-06 --out data/delhi_ndvi.csv
+  green_cover: "csv:data/delhi_ndvi.csv"
   # INERT PLACEHOLDER — no free historical traffic source. Flat value, and its
   # MCDA weight is 0 (below), so it never affects any ranking. Disclosed, not real.
-  traffic: "csv:data/ahmedabad_traffic_placeholder.csv"
+  traffic: "csv:data/delhi_traffic_placeholder.csv"
   # REAL AQI — free, no key (Open-Meteo Air-Quality archive). Refresh with:
   #   python scripts/openmeteo_aqi_export.py --config config/city.yaml \
-  #     --start 2023-01 --end 2026-06 --out data/ahmedabad_aqi.csv
-  aqi: "csv:data/ahmedabad_aqi.csv"
+  #     --start 2023-01 --end 2026-06 --out data/delhi_aqi.csv
+  aqi: "csv:data/delhi_aqi.csv"
 
 sites:
   # Bare-land site finder: bare-ground patches from Esri 10 m Land Cover
@@ -49,25 +49,25 @@ sites:
   # one cloud-free scene (date in the csv header), candidates to verify, not a
   # survey. Refresh with:
   #   python scripts/sentinel2_ndvi_export.py --config config/city.yaml \
-  #     --out-sites data/ahmedabad_sites.csv
-  candidates_csv: data/ahmedabad_sites.csv
+  #     --out-sites data/delhi_sites.csv
+  # candidates_csv: data/delhi_sites.csv   # run sentinel2_ndvi_export.py first
   min_patch_m2: 100          # ignore patches smaller than one 10 m pixel
   max_sites_per_zone: 15
   # "temporal plantability" thresholds on the NDVI stack — CALIBRATE to ground
   ndvi_ever_green: 0.25
   ndvi_never_green: 0.15
-  # plantable_csv: data/ahmedabad_plantable.csv   # legacy pre-computed fraction
+  # plantable_csv: data/delhi_plantable.csv   # legacy pre-computed fraction
 
 soil:
   # SoilGrids 250 m (modelled pH/texture/carbon) + NASA SMAP (measured moisture).
   # Species selection respects soil pH and texture when these are supplied.
   # REAL soil — free, no key (ISRIC SoilGrids v2.0). Refresh with:
-  #   python scripts/soilgrids_export.py --config config/city.yaml   #     --out data/ahmedabad_soilgrids.csv
+  #   python scripts/soilgrids_export.py --config config/city.yaml   #     --out data/delhi_soilgrids.csv
   # SoilGrids masks built-up land, so cells in the dense core are recovered by
   # re-sampling offsets around the centre; a few may still come back empty and
   # simply fall through to pollution-only species matching.
-  soilgrids_csv: data/ahmedabad_soilgrids.csv
-  # moisture_csv: data/ahmedabad_smap.csv   # NASA SMAP needs an Earthdata login
+  soilgrids_csv: data/delhi_soilgrids.csv
+  # moisture_csv: data/delhi_smap.csv   # NASA SMAP needs an Earthdata login
 
 training:
   iterations: 60            # backtest (zone, cutoff) samples per training run
@@ -107,7 +107,7 @@ model:
   # local LLM on Intel OpenVINO: no API key, no per-token cost, no network,
   # no city figures leaving the machine. Fetch the LLM:
   #   python scripts/fetch_openvino_model.py
-  provider: hybrid              # hybrid | openvino | openrouter | nvidia | mock
+  provider: mock                # hybrid | openvino | openrouter | nvidia | mock
   model_dir: models/openvino/qwen2.5-1.5b-instruct-int4-ov
   chat_template: chatml
   device: CPU                   # CPU | GPU | NPU | AUTO — any OpenVINO device
