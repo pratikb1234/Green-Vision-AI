@@ -318,9 +318,33 @@ class OpenVINOClient:
                 "    python scripts/fetch_openvino_model.py"
             )
 
+        # The NPU runs GenAI's static-shape pipeline: the kv-cache is fixed at
+        # compile time to MAX_PROMPT_LEN + MIN_RESPONSE_LEN tokens (defaults
+        # 1024 + 128), and generation stops at that boundary no matter what
+        # max_new_tokens asks for — so the defaults would cut a 2048-token
+        # recommend reply mid-JSON. Reserve the configured budget instead.
+        # MIN_RESPONSE_LEN must cover the max_new_tokens CAP, not the typical
+        # reply: chunk_zones keeps real replies far shorter, which is what
+        # makes a smaller max_new_tokens (and so a smaller, faster-compiling
+        # NPU reservation) viable in config — but whatever cap is configured
+        # has to fit. Only the literal device "NPU" takes these keys; the
+        # dynamic CPU/GPU pipelines reject them as unknown properties, and
+        # AUTO never routes to the static NPU pipeline (exact-match dispatch
+        # in openvino.genai), so AUTO gets none of this.
+        pipeline_kwargs: dict[str, Any] = {}
+        if cfg.device.strip().upper() == "NPU":
+            pipeline_kwargs = {
+                "MAX_PROMPT_LEN": int(cfg.npu_max_prompt_len),
+                "MIN_RESPONSE_LEN": int(cfg.max_new_tokens),
+            }
+            log.info(
+                "NPU static pipeline: MAX_PROMPT_LEN=%d MIN_RESPONSE_LEN=%d",
+                pipeline_kwargs["MAX_PROMPT_LEN"], pipeline_kwargs["MIN_RESPONSE_LEN"],
+            )
+
         log.info("loading OpenVINO model %s on %s", model_dir.name, cfg.device)
         t0 = time.time()
-        self.pipe = openvino_genai.LLMPipeline(str(model_dir), cfg.device)
+        self.pipe = openvino_genai.LLMPipeline(str(model_dir), cfg.device, **pipeline_kwargs)
         log.info("OpenVINO pipeline ready in %.1fs", time.time() - t0)
 
     def _render(self, system: str, user: str) -> str:

@@ -112,6 +112,12 @@ model:
   chat_template: chatml
   device: CPU                   # CPU | GPU | NPU | AUTO — any OpenVINO device
   max_new_tokens: 2048          # 10 zones of justification + species needs room
+  # NPU only (ignored elsewhere): the NPU pipeline is compiled with STATIC
+  # shapes — prompts longer than this fail outright, and the kv-cache is fixed
+  # at npu_max_prompt_len + max_new_tokens. With zones chunked 3 per call,
+  # replies stay short: on NPU a smaller max_new_tokens (e.g. 1024) also works
+  # and shrinks the compile-time reservation.
+  npu_max_prompt_len: 4096
   # Used only by the hosted providers below; ignored when provider: openvino.
   name: meta/llama-3.1-70b-instruct
   # Verified fast + reliable on this account. Other options on the endpoint:
