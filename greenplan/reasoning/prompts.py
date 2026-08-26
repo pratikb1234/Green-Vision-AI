@@ -44,7 +44,8 @@ RECOMMEND_SYSTEM = (
     "and planting context to the zone's conditions AND respecting soil fit — do NOT "
     "pick a species whose soil_ph range excludes the zone's pH or whose soil_texture "
     "excludes the zone's texture (when soil data is given). You must NOT reorder zones, "
-    "invent data values, invent species, or alter species traits. Reply with STRICT "
+    "invent data values, invent species, or alter species traits. Never use quotation "
+    "marks or line breaks inside justification text. Reply with STRICT "
     'JSON only: {"zones": [{"zone": "<id>", "justification": "<2-3 sentences>", '
     '"species": ["<name from table>", ...]}]}'
 )

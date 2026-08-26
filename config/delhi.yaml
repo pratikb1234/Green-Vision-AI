@@ -50,7 +50,7 @@ sites:
   # survey. Refresh with:
   #   python scripts/sentinel2_ndvi_export.py --config config/city.yaml \
   #     --out-sites data/delhi_sites.csv
-  # candidates_csv: data/delhi_sites.csv   # run sentinel2_ndvi_export.py first
+  candidates_csv: data/delhi_sites.csv
   min_patch_m2: 100          # ignore patches smaller than one 10 m pixel
   max_sites_per_zone: 15
   # "temporal plantability" thresholds on the NDVI stack — CALIBRATE to ground
