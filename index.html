@@ -385,7 +385,9 @@ function buildGoals(){
 }
 window.addEventListener("DOMContentLoaded",()=>{
   initMap(); buildGoals();
-  toast("Click anywhere on the map to begin");
+  toast("Click anywhere on the map to analyse another spot");
+  // Land on a live report, not an empty map: analyse the city centre on load.
+  analyse(CFG.START[0], CFG.START[1]);
   $("#enterBtn").onclick=()=>{$("#intro").style.display="none";toast("Click anywhere on the map to begin");};
   $$(".viewbtn").forEach(b=>b.onclick=()=>setView(b.dataset.view));
   $("#zoomIn").onclick=()=>map.zoomIn();
