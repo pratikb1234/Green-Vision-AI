@@ -23,3 +23,14 @@ huggingface_hub>=0.24
 # Esri World Imagery tiles (JPEG) before re-saving them as PNG. The engine
 # and the studio never import it. See docs/intel/geti-canopy-runbook.md.
 # Pillow>=10.0
+
+# --- optional: satellite exports + the land-cover site filter -------------
+# rasterio does the keyless windowed COG reads (Sentinel-2 via Earth Search,
+# ESA WorldCover via the public esa-worldcover bucket) that
+# scripts/sentinel2_ndvi_export.py and scripts/train_landcover.py need.
+# Training the filter also needs scikit-learn + skl2onnx + onnx above;
+# nncf is only for the optional INT8 quantization pass. RUNNING the filter
+# (--classify-sites, and the engine reading its flags) needs nothing beyond
+# openvino and rasterio.
+# rasterio>=1.3
+# nncf>=2.9

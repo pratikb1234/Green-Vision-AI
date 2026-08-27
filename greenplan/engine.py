@@ -191,6 +191,7 @@ def _load_sites(cfg: Config) -> CandidateSites | None:
         cfg.resolve(cfg.sites.candidates_csv),
         cfg.grid.h3_resolution,
         cfg.sites.min_patch_m2,
+        cfg.resolve(cfg.sites.landcover_dir),
     )
 
 
@@ -430,6 +431,8 @@ def _write_outputs(
                         "priority_score": round(float(r.score), 4),
                         "patch_area_m2": s["patch_area_m2"],
                         "confidence": s["confidence"],
+                        "landcover_class": s["landcover_class"],
+                        "flagged_not_plantable": s["flagged_not_plantable"],
                         "ndvi_latest": round(float(r.ndvi_latest), 3),
                         "species": rec.get("species", []),
                         "positional_accuracy_m": 5,
@@ -498,9 +501,13 @@ def _write_outputs(
                     "confirm on sub-metre basemap before digging):"
                 )
                 for i, s in enumerate(zone_sites[:5], 1):
+                    mark = (
+                        f"  [FLAGGED {s['landcover_class']} — likely NOT plantable]"
+                        if s.get("flagged_not_plantable") else ""
+                    )
                     brief.append(
                         f"      {i}. lat {s['lat']:.5f}, lon {s['lon']:.5f}  "
-                        f"(~{s['patch_area_m2']:.0f} m²)"
+                        f"(~{s['patch_area_m2']:.0f} m²){mark}"
                     )
             else:
                 brief.append("    Planting sites: none detected — survey on foot")
@@ -517,6 +524,34 @@ def _write_outputs(
             "    visually on a sub-metre basemap (Esri World Imagery) and on the ground",
             "    before digging — ownership, utilities and access are not modelled.",
         ]
+        if sites.filtered:
+            n_flag = int(sites.sites["flagged"].sum())
+            brief += [
+                f"  - {n_flag} of {len(sites.sites)} candidates are FLAGGED by the",
+                "    land-cover classifier as water, roof or existing canopy rather than",
+                "    plantable ground. They are kept, not deleted: the classifier is a",
+                f"    screening aid measured at {sites.gate.get('accuracy')} held-out accuracy",
+                f"    (the NDVI rule it replaces scored {sites.gate.get('baseline_accuracy')}),",
+                "    trained on 2021 labels and applied to a later scene. Check flagged",
+                "    sites first — that is where it is most likely to be wrong.",
+            ]
+        elif sites.sites["landcover_class"].ne("unclassified").any():
+            if sites.gate.get("site_agreement") is not None:
+                brief += [
+                    "  - The land-cover site filter is BENCHED: held-out accuracy "
+                    f"{sites.gate.get('accuracy')} but only",
+                    f"    {sites.gate.get('site_agreement')} agreement with ESA WorldCover on "
+                    f"these very sites (needs {sites.gate.get('required_agreement')}).",
+                ]
+            else:
+                brief.append(
+                    f"  - The land-cover site filter is BENCHED ({sites.gate.get('reason')})."
+                )
+            brief += [
+                "    No candidate has been screened for water/roof/canopy, and its",
+                "    landcover_class column is shown for inspection only. Every site",
+                "    still needs a human eye. See the README for why it failed.",
+            ]
     else:
         brief += [
             "  - 'Plantable space' is a placeholder proxy (1 - NDVI); supply a",

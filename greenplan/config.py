@@ -50,6 +50,15 @@ class SitesCfg:
     # Legacy: a pre-computed 0..1 plantable-fraction CSV (zone/lat-lon + value).
     # candidates_csv is preferred; this stays for hand-supplied fractions.
     plantable_csv: str | None = None
+    # Land-cover site filter (ESA WorldCover-trained, ONNX executed by
+    # OpenVINO). Holds landcover.onnx + norm.json + report.json + the
+    # site_audit.json written by --classify-sites. The flags it writes into
+    # the candidates CSV are honoured only if BOTH gates in
+    # greenplan.features.sites.landcover_gate are clear: held-out skill over
+    # the NDVI rule, and continued agreement with its own labels on the
+    # candidate sites themselves.
+    #   python scripts/train_landcover.py --config config/city.yaml
+    landcover_dir: str = "models/{city}/landcover"
 
 
 @dataclass
@@ -190,4 +199,5 @@ def load_config(path: str | Path) -> Config:
     cfg.training.memory_path = cfg.training.memory_path.replace("{city}", slug)
     cfg.run.outputs_dir = cfg.run.outputs_dir.replace("{city}", slug)
     cfg.model.forecaster_dir = cfg.model.forecaster_dir.replace("{city}", slug)
+    cfg.sites.landcover_dir = cfg.sites.landcover_dir.replace("{city}", slug)
     return cfg

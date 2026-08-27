@@ -201,6 +201,200 @@ water/rock/roofs at scene time — candidates for a human to verify, not a
 survey. The two-scale rule: **MODIS answers "how is this cell changing",
 Sentinel-2 answers "where in it is the ground".**
 
+### The land-cover filter: telling bare ground from water, rock and roofs
+
+The section above admits the hole, so here is the thing that narrows it.
+Low NDVI is **not** the same as bare ground — open water, rock, bright sand
+and a flat concrete roof all sit under the bare threshold, and the NDVI rule
+cannot tell them from the dusty vacant plot you actually want. Which is why
+the honest instruction until now was "a human verifies all 2,190 candidates".
+
+`scripts/train_landcover.py` trains a per-pixel land-cover classifier on free
+labelled data, exports it to ONNX and runs it on OpenVINO, exactly like the
+forecaster. Both inputs are keyless:
+
+| | Source |
+|---|---|
+| **X** (features) | one cloud-free 2021 Sentinel-2 L2A scene, same Earth Search STAC API — B02/B03/B04/B08 plus NDVI and **NDWI** (NDWI is what separates water from dry ground, the confusion NDVI alone makes) |
+| **y** (labels) | **ESA WorldCover 2021 v200**, the 10 m global land-cover map, from the public `esa-worldcover` S3 bucket — same year, same 10 m grid, no account |
+
+```bash
+python scripts/train_landcover.py --config config/city.yaml --tile 42QZL
+python scripts/sentinel2_ndvi_export.py --config config/city.yaml \
+    --out-sites data/ahmedabad_sites.csv --classify-sites \
+    --scene-id S2A_42QZL_20260607_0_L2A
+```
+
+**The split is spatial, not random.** Neighbouring 10 m pixels are near-copies
+of each other, so a random pixel split scores a model on ground it has all but
+memorised — the classic remote-sensing leak that manufactures 99 % accuracies
+that mean nothing. Here the scene is cut into 132 contiguous 256 px (2.56 km)
+blocks, 40 whole blocks are held out, and the 834,084 pixels within 320 m of a
+test block are dropped from training so the two sets never touch.
+
+#### Measured
+
+Train scene `S2A_42QZL_20210512_1_L2A` (2021-05-12, 0.00 % cloud),
+7,117,428 labelled pixels, 200,000 train / 300,000 held-out, spatially
+disjoint. The incumbent is the NDVI-threshold rule the site finder already
+uses, with its band tuned on the *same* training pixels — it gets its best
+possible shot.
+
+| | Held-out accuracy | Macro-F1 |
+|---|---|---|
+| NDVI threshold rule, tuned — **the incumbent** | 0.6602 | 0.6599 |
+| **MLP (32, 16) via OpenVINO** | **0.8113** | **0.8092** |
+| RandomForest, reference only | 0.8103 | 0.8087 |
+| MLP INT8 (NNCF) | 0.7882 | 0.7852 |
+
+**+0.151 accuracy over the rule it replaces.** Inference is 300,000 pixels in
+19 ms on a plain CPU (0.06 µs/pixel) — the whole 2,190-site list is classified
+in well under a millisecond; the cost of this feature is entirely in
+downloading the imagery.
+
+That is a real result, and it is **not** enough to deploy the thing. Skip to
+"the second gate" below before believing it.
+
+Per-group F1 on held-out ground, and this is the part that matters more than
+the headline:
+
+| Group | F1 | Support | |
+|---|---|---|---|
+| built_up | 0.850 | 118,103 | not plantable |
+| water_wetland | 0.769 | 4,715 | not plantable |
+| cropland | 0.742 | 107,373 | plantable |
+| tree_cover | 0.520 | 40,889 | not plantable |
+| **bare_sparse** | **0.151** | 5,253 | **plantable** |
+| **shrub_grass** | **0.072** | 23,667 | **plantable** |
+
+Read that table before trusting this model. It is genuinely good at the thing
+it was built for — **built-up 0.85 and water 0.77 is exactly the "that's a
+roof" / "that's a pond" call the NDVI rule could not make.** It is close to
+useless at separating bare/sparse ground from cropland and shrubland, the two
+rarest and most planting-relevant classes. Two attempts to fix that, both
+measured, both published:
+
+- `--balance` (equal training pixels per class) lifts shrub_grass F1 to 0.253
+  and bare_sparse to 0.175, but drops the binary decision that is actually
+  deployed from 0.8113 to **0.7312**. Worse where it counts, so not the
+  default.
+- `--hidden 64 32` buys **+0.0003** accuracy for 2.5× the weights. Capacity is
+  not the constraint; six bands on a single date is.
+
+#### The second gate: it fails on the ground it was built for
+
+Held-out accuracy is measured on a random spatial sample of the whole scene.
+The candidate sites are nothing like that sample — they are the **extreme
+low-NDVI tail**, hand-picked by a different rule. So the classifier was
+re-scored on the population it is actually deployed on: ESA WorldCover 2021,
+its own training label source, read back at the exact 2,190 candidate
+coordinates.
+
+| At the 2,190 candidate sites | Plantable |
+|---|---|
+| ESA WorldCover 2021 says | **786 (35.9 %)** |
+| the classifier says | **0 (0.0 %)** |
+| agreement | **0.641** (held-out was 0.811) |
+
+It flags **all 2,190** — 95.4 % built-up, 4.5 % water, 0.1 % bare — while the
+labels it was trained on call more than a third of them croplands, bare
+ground, shrub or grass. Its highest confidence on any single candidate is
+0.44; it never once reaches the 0.5 it would need to pass one. On the tail
+where it is used, it disagrees with its own teacher 36 % of the time, against
+19 % on the population it was validated on.
+
+**So the classifier is BENCHED.** `landcover_gate()` in
+`greenplan/features/sites.py` requires both criteria — held-out skill *and*
+deployment agreement within 0.10 of it — and the second one fails:
+
+```
+gate 1 (held-out vs the tuned NDVI rule): PASSED  (+0.1511)
+gate 2 (agreement with WorldCover on THESE sites): FAILED (0.641, needs >= 0.711)
+-> flags kept in the CSV for inspection, acted on by nothing
+```
+
+Two things are worth saying plainly about this.
+
+**The single-gate version would have shipped.** A classifier at 0.81 held-out
+accuracy, +0.15 over the incumbent, is a perfectly respectable result and the
+obvious thing to do is wire it in. Had it been wired in, every one of the
+2,190 candidate sites would have been marked not-plantable,
+`plantable_fraction_by_cell` would have returned zero for every cell, and the
+`plantable_space` criterion — 0.10 of the MCDA weight — would have silently
+become a constant across the whole city. The ranking would have shifted and
+nothing would have looked broken. The second gate exists because of that.
+
+**Why it fails is instructive, not mysterious.** Two compounding causes, and
+this repo cannot separate them with free data: selection shift (the lowest-NDVI
+pixels in a June scene are overwhelmingly roofs and asphalt, so a model with
+any built-up bias is most wrong exactly there) and temporal drift (2021 labels,
+2026 imagery, five years of construction in a fast-growing city). The honest
+statement is that **the site list is still 2,190 candidates for a human to
+verify**, and this section is a measurement of why the obvious fix does not
+work yet, not a fix.
+
+What would actually move it: multi-date composites instead of one scene,
+SWIR bands (B11/B12 separate dry soil from concrete far better than the
+visible bands do), and labels from the same year as the imagery. All three are
+reachable from keyless sources. None of them are built.
+
+#### NNCF INT8: measured, and not worth it here
+
+Mirroring `compress_model_nncf.py`, the graph is also post-training quantized
+to INT8 and re-scored. Honest result: **−0.0231 accuracy for weights of 1.3 kB
+instead of 3.4 kB.** A 2.6× cut on a model that was already 3.4 kB buys
+nothing and costs more than two accuracy points, so the FP32 ONNX graph is
+what ships. The quantized IR is written to `landcover_int8/` anyway, with its
+score, because the INT4 compression that makes the *language* model fit on a
+laptop is the same operation — it just has nothing to do on a network this
+small. Compression pays where the weights are gigabytes, not kilobytes.
+
+#### What it changes, and what it deliberately does not
+
+Every candidate site gains three columns — `landcover_class`, `plantable`,
+`confidence` — and `data/ahmedabad_sites.csv` ships with them. **Nothing is
+dropped, and right now nothing is filtered either.** Because gate 2 failed,
+`sites.py` reads those columns, logs that the filter is benched, treats every
+site as unflagged and resets confidences to 1.0, so the ranking is bit-for-bit
+what it was before this feature existed. The columns are there to be looked
+at, not obeyed.
+
+Had both gates passed, the wiring is already in place and does this: flagged
+sites sort last, contribute no plantable area to
+`plantable_fraction_by_cell`, and carry `flagged_not_plantable` into
+`planting_sites.geojson` and the planting brief — marked, never deleted,
+because a screening model that silently removes real planting sites is worse
+than one that is visibly wrong. The brief tells a crew to check flagged sites
+*first*, on the grounds that that is where the model is most likely to be
+wrong about them.
+
+Same discipline as `provider: hybrid` and the forecast challenger: a model in
+the repo with a published score, not a model in the pipeline on faith. The
+difference is that this one has two scores, and it is the second that decided
+the matter.
+
+#### Limits, stated
+
+- **2021 labels, 2026 imagery.** WorldCover is a 2021 map; the site finder
+  runs on a 2026-06-07 scene. Anything built, cleared or flooded in those five
+  years is mislabelled in training, and **the held-out score does not measure
+  that drift at all** — it is a 2021-vs-2021 number. Treat 0.81 as an upper
+  bound on 2026 performance, not an estimate of it.
+- **One scene, one date.** May 2021 spectra against June 2026 spectra. A
+  fallow field in the monsoon looks nothing like the same field in May, and
+  seasonal difference is not modelled.
+- **Classes it cannot separate:** bare/sparse from cropland from shrubland
+  (F1 0.15 / 0.07). If you need "is this specifically bare ground", this model
+  will not tell you. If you need "is this a roof or a pond", it will.
+- **Half-pixel misregistration.** Sentinel-2 is UTM, WorldCover is EPSG:4326;
+  both 10 m, offset by up to ~5 m. Label noise at parcel edges is real and
+  unremoved.
+- **Cropland counts as plantable** because it is unsealed ground. It is not
+  vacant. Ownership, tenure, utilities and permission are not modelled
+  anywhere in this repo.
+- The classifier says what the ground **is**. It never says who owns it or
+  whether planting there is allowed. Every site still needs a human.
+
 ### A second city is one config file
 
 Everything downstream of `config/<city>.yaml` is city-agnostic. Standing up
