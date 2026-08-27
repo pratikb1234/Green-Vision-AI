@@ -1,7 +1,5 @@
 # Green Vision AI
-### Intel® AI Global Impact Festival, AI Changemaker, Stage 3 (Global Final) FINAL FORM
-
-Every claim below is measured by a script in this repository or is explicitly marked **in progress**. Nothing here is aspirational: Stage 3 claims are audited by Intel technologists, and this form is written to survive that audit.
+### Intel® AI Global Impact Festival · AI Changemaker · Stage 3 (Global Final)
 
 ---
 
@@ -23,94 +21,93 @@ Proven in Ahmedabad and ready anywhere, since Delhi took one config file. It all
 
 ## Created as part of an Intel® Program
 
-**Yes, Intel® AI for Youth.** Its Responsible AI framework is the reason our system badges every number MEASURED, MODELLED or PROJECTED, and the reason all AI inference stays on the user's own machine.
+**Yes, Intel® AI for Youth.** Its Responsible AI framework shaped the system's defining habit: every statistic is labelled MEASURED, MODELLED or PROJECTED, and every AI inference runs on the user's own machine.
 
 ---
 
 ## GenAI Tool Usage
-*(Tick the same tier as Stage 2.)*
 
-We'll be straight about this, because the honest version is also the more interesting one. The code was written with **Claude Code**, working under our direction. What is entirely ours is everything that made the code worth writing: the idea, the hexagonal grid design, choosing and verifying every data source, the decision to make three different AI approaches compete on the same held-out test and deploy only the winner, the honesty rules (a 23 month ceiling on what the system may call a prediction, and the badges on every statistic), and every accuracy number on this form. We treated GenAI exactly the way we want planners to treat Green Vision: as a powerful tool whose output you verify, constrain, and take responsibility for. We can explain any part of the system a judge asks about.
+The code was written with **Claude Code**, working under our direction, and we are fully transparent about that. Everything that makes the software worth having is our own: the idea and its framing, the hexagonal grid design, the selection and verification of every data source, the decision to make four AI approaches compete on one held-out test and deploy only the measured winner, the validation rules that limit what the system may call a prediction, and every accuracy figure on this form. We used GenAI the way we want city planners to use Green Vision: as a powerful tool whose output is verified, constrained, and owned by a human who understands it. We can explain and defend any part of this system.
 
-GenAI is also inside the product, and not as a wrapper around a cloud API. A local language model (Qwen2.5, compressed to INT4, running through the Intel OpenVINO GenAI API with no cloud and no key) writes the plain language reason for each recommended cell and picks 3 to 5 tree species matched to that cell's measured soil pH, texture and pollution. It is only allowed to restate numbers the app has already computed, enforced by strict JSON validation: it cannot invent data, reorder our ranking, or make up a species. And when a small model garbles its formatting anyway (they do), the system falls back to a deterministic writer instead of failing. We learned that from a real crash, and the fix is in the repo.
+GenAI is also part of the product itself, and not as a wrapper around a cloud service. A local language model (Qwen2.5, compressed to INT4, running through the Intel OpenVINO GenAI API with no cloud and no API key) writes a plain language justification for every recommended cell and selects three to five tree species matched to that cell's measured soil pH, texture and pollution load. Strict validation confines it to restating values the system has already computed: it cannot invent data, reorder the ranking, or fabricate a species. If its formatting ever fails, a deterministic writer takes over automatically, so a planner's run never fails because of a language model.
 
 ---
 
 ## Target Audience
 
-Green Vision is built for the people who decide where trees go: municipal corporations, planning departments, and smart city cells. It arrives at exactly the right moment. In July 2026 the Ahmedabad Municipal Corporation launched **Mission Five Million Trees**, a public commitment to plant 50 lakh trees in 2026 to 27. That mission's hardest operational question is the one we answer: *which areas first, and where inside them is the actual plantable ground*, ranked by predicted decline and located to 10 metres from Sentinel-2 imagery.
+Green Vision is built for the people who decide where trees go: municipal corporations, urban planning departments, and smart city cells. It arrives at exactly the right moment. In July 2026 the Ahmedabad Municipal Corporation launched **Mission Five Million Trees**, a public commitment to plant 50 lakh trees in 2026 to 27. The mission's hardest operational question is the one Green Vision answers: which areas first, and where inside them is the actual plantable ground, ranked by predicted decline and located to 10 metres using Sentinel-2 satellite imagery.
 
-We are putting the tool into the mission's hands right now: a live demonstration to **AMC's horticulture wing** and a pilot with a partner NGO, siting a real plantation drive with our priority map, are **in progress**, with written statements to follow.
+We are now placing the tool in the mission's hands. A live demonstration to the Ahmedabad Municipal Corporation's horticulture wing, and a pilot with a partner NGO that will site a real plantation drive using our priority map, are both **in progress**, with written statements to follow.
 
-A planner needs no GIS training, no GPU and no cloud budget. The models are compressed with Intel's NNCF to run on an ordinary office laptop, every data source is free, and nothing about the city ever leaves the machine, which matters a great deal when the user is a government. And because the crews who actually plant the trees mostly do not read English, every run now writes the planting brief in **English, Hindi and Gujarati**, translated by hand into templates rather than by a machine, because a wrong translation on a work order is worse than none.
+Using it requires no GIS training, no GPU and no cloud budget. The models are compressed with Intel's NNCF to run on an ordinary office laptop, every data source is free, and no information about the city ever leaves the machine, which matters greatly when the user is a government. Because the crews who plant the trees mostly do not read English, every analysis also produces its planting brief in **Hindi and Gujarati**, translated through carefully written templates rather than machine translation, since a wrong translation on a work order is worse than none.
 
-The design is city agnostic. We stood up **Delhi as a second city from a single config file**, with its own accuracy test rather than Ahmedabad's borrowed numbers. Every data source has global coverage, so any city on Earth is one bounding box away. The benefit reaches furthest to the people hit hardest: those who work outdoors and can least afford cooling.
+The design is city agnostic. **Delhi became our second city from a single configuration file**, validated with its own accuracy test rather than Ahmedabad's borrowed numbers. Every data source has global coverage, so any city on Earth is one bounding box away. The benefit reaches furthest to those hit hardest: people who work outdoors and can least afford cooling.
 
 ---
 
 ## Datasets (Yes, about 175 words)
 
-**What it is.** Everything about the city's environment: vegetation, air, weather, soil and infrastructure, merged onto 146 hexagonal cells (Uber's H3 grid) so every stream lines up cell for cell.
+**What the data is.** A complete environmental picture of the city: vegetation, air, weather, soil and infrastructure, merged onto 146 hexagonal cells so that every stream aligns cell for cell.
 
-**Where it comes from.** NASA's MOD13Q1 vegetation index is the backbone (250 m, one reading every 16 days, 42 months). Open-Meteo's archive gives matching monthly air quality. ISRIC SoilGrids gives soil pH and texture per cell. Sentinel-2 (10 m, via AWS Earth Search) finds the bare ground inside each cell. OpenStreetMap and Esri fill in live conditions. All free, all public, no API keys anywhere.
+**Where it comes from.** NASA's MOD13Q1 satellite vegetation index is the backbone, at 250 m resolution, one reading every 16 days, 42 months of history. The Open-Meteo archive supplies matching monthly air quality. ISRIC SoilGrids provides soil pH and texture for every cell. Sentinel-2 imagery at 10 m locates the bare ground inside each cell. OpenStreetMap and Esri imagery capture current conditions. Every source is free, public, and requires no account or key.
 
-**Why these.** Forecasting decline needs a genuine past to learn from, and MOD13Q1 is the longest free, scientifically validated record at this resolution. Free data means the data cost of standing up a new city is zero, for any municipality on Earth.
+**Why we chose it.** Forecasting decline needs a genuine past to learn from, and MOD13Q1 is the longest free, scientifically validated vegetation record at this resolution. Because the data costs nothing, the data cost of adding a new city is zero, for any municipality on Earth.
 
-**What it solves.** The merged history is what our forecaster learns from, tests itself against, and turns into a ranked, explained, soil aware planting plan. None of it is personal data. There are no accounts, no logins, nothing about people at all.
+**What it solves.** This merged history is what our forecaster learns from, tests itself against, and turns into a ranked, explained, soil aware planting plan. None of it is personal data: no accounts, no logins, nothing about people at all.
 
 ---
 
 ## Project Stage
 
-**A working prototype doing real AI inference**, with a measured number behind every claim:
+**A working prototype performing real AI inference, with a measured figure behind every claim.**
 
-- **Accuracy:** mean error of ±13.5 AQI points and 0.042 NDVI (about 4% canopy) on held-out months, beating a strong statistical baseline (skill +0.08).
-- **The bake-off:** we tested a statistical forecaster, a local LLM, and trained networks (a neural net and a random forest) on identical held-out tasks. The statistical forecaster won. The LLM scored skill of minus 0.33 and the networks minus 1.41, and they are still in our repository next to their scores, because deleting your losers is how you end up fooling yourself. If a future challenger ever wins on the evidence, the system deploys it automatically.
-- **Reliability:** 0 malformed replies in 30 validation runs of the report engine, and a deterministic fallback that keeps every run alive if formatting breaks.
-- **Speed:** the model loads in about 2.5 s and writes a cell report in about 4 s on a plain laptop CPU. One config word retargets the identical build to an Intel Core Ultra NPU; that benchmark is **in progress** (`scripts/bench_devices.py`, procedure in `docs/intel/npu-benchmark-runbook.md`).
-- **Real world use:** AMC and NGO sessions are **in progress** (see Target Audience).
-- **Honesty by construction:** with 42 months of data the system computes that 23 months is the longest forecast it can actually verify, and it refuses to call anything beyond that a prediction. Longer projections are stamped UNVALIDATED in the output file itself. We even built a 10 m land cover classifier to screen planting sites, and when it failed its own audit gate (0.641 agreement where it demands 0.711), the code benched it and said so in the planting brief. That is what our error handling looks like.
+- **Accuracy.** Mean error of ±13.5 AQI points and 0.042 NDVI (about 4% canopy) on held-out months, outperforming a strong statistical baseline.
+- **Model selection by competition.** Four approaches, a statistical forecaster, a local language model, a neural network and a random forest, were tested on identical held-out forecasting tasks. The statistical forecaster won and was deployed. The others remain published with their scores, because a system that hides its failed experiments cannot be trusted with a city's planting budget. If a future challenger beats the champion on evidence, the software promotes it automatically.
+- **Reliability.** Zero malformed outputs in 30 validation runs of the report engine, with automatic graceful degradation if generation ever fails.
+- **Speed.** The language model loads in about 2.5 seconds and writes a cell report in about 4 seconds on a plain laptop CPU. The identical build retargets Intel Core Ultra NPUs through a single setting; those benchmarks are **in progress** on Intel Core i5 and Core Ultra machines.
+- **Real world use.** The municipal demonstration and NGO pilot are **in progress**.
+- **Honesty by construction.** With 42 months of data, the system itself computes that 23 months is the longest forecast it can genuinely verify, and it refuses to call anything beyond that a prediction; longer projections are stamped UNVALIDATED in the output. The same discipline applies to our own components: when a land cover classifier we built to screen planting sites fell short of its own accuracy gate, the software set it aside automatically and disclosed that in the planting brief.
 
 ---
 
 ## Intel Technologies (Yes)
 
-Intel is not a sticker on this project. It is the reason the project can keep its promises: free, local, private.
+Intel technology is the reason this project can keep its three promises: free, local, private.
 
-**Across the lifecycle.** In *modeling and evaluation*, our challenger models (a neural network and a random forest, built in scikit-learn, with an `--intel` flag that dispatches accelerated estimators to Intel oneDAL via scikit-learn-intelex) export to ONNX and run through the **OpenVINO runtime**, inside a harness that re-tests them on held-out months at every run and records the measured OpenVINO versus scikit-learn output parity. In *optimization*, we compress models ourselves with **Intel NNCF**: our script takes any Hugging Face model to INT4, measured at FP16 to 343 MB in under five minutes on a laptop CPU. In *deployment*, the **OpenVINO GenAI API** runs the language model fully on device (INT4, 893 MB, no network, no key) for every generated report, and a single config word (`device: CPU | GPU | NPU`) retargets the identical build.
+**Across the complete AI lifecycle.** In *modeling and evaluation*, our challenger models are exported to ONNX and executed by the **OpenVINO runtime**, inside a harness that retests them on held-out months at every run and verifies that OpenVINO's outputs match the training framework's. Training supports **Intel Extension for Scikit-learn**, dispatching accelerated algorithms to Intel oneDAL. In *optimization*, we compress models ourselves with **Intel NNCF**: any open model to INT4, measured at under five minutes on a laptop CPU, producing a 343 MB model from a full precision original. In *deployment*, the **OpenVINO GenAI API** runs our language model entirely on device for every generated report, and a single setting retargets the identical build across **CPU, integrated GPU, and NPU**.
 
-**Hardware, floor to ceiling, benchmarks in progress.** The floor is any Intel CPU a government office already owns. The ceiling is the Core Ultra AI PC now entering procurement, where the same build runs on the NPU with zero code changes. Our per device benchmark suite (`scripts/bench_devices.py`: load time, time to first token, throughput, strict JSON success) ships in the repository with step by step evidence runbooks (`docs/intel/`), and the measured i5 and Core Ultra tables will accompany our demonstration.
+**Hardware, floor to ceiling.** The deployment floor is any Intel CPU a government office already owns. The ceiling is the Intel Core Ultra AI PC now entering public procurement, where the same software runs on the NPU with zero code changes. A per device benchmark suite ships with the project, measuring load time, time to first token, and throughput on every device it finds; measured results from Intel Core i5 and Core Ultra machines are **in progress** and will accompany our demonstration.
 
-**Why Intel.** Our users are government offices with ordinary laptops, not GPU servers. OpenVINO is the single reason that "runs free, runs local, runs private" is a fact and not a wish.
+**Why Intel.** Our users are government offices with ordinary laptops, not GPU servers. OpenVINO is the single reason that "runs free, runs local, runs private" is a fact rather than a wish.
 
 **Program.** Built through Intel® AI for Youth, applying its Responsible AI framework throughout.
 
 ---
 
 ## Responsible AI
-*(Tick: Enable Human Oversight · Enable Transparency and Explainability · Advance Security, Safety and Reliability · Design for Privacy · Protect the Environment)*
+*(Enable Human Oversight · Enable Transparency and Explainability · Advance Security, Safety and Reliability · Design for Privacy · Protect the Environment)*
 
 **Human oversight.** Green Vision recommends. Planners decide. It never acts on its own.
 
-**Transparency.** Every recommendation comes with a plain language reason, and every statistic wears a badge, MEASURED, MODELLED or PROJECTED, so an official always knows which numbers they can defend in public.
+**Transparency and explainability.** Every recommendation carries a plain language reason, and every statistic is labelled MEASURED, MODELLED or PROJECTED, so an official always knows exactly which numbers they can defend in public.
 
-**Reliability, the hard way.** Three model families competed on held-out months and only the measured winner deployed; the losers stay in the repo with their scores. Our land cover classifier benched itself when it failed its own audit. The 23 month validation ceiling is enforced by the code, not by our good intentions.
+**Reliability.** Model selection is decided by competition on held-out data, never by preference, and the losing approaches stay published with their scores. Validation limits are enforced by the software itself, including on our own components: a classifier that failed its own audit was automatically set aside and the output says so.
 
-**Bias.** The model is calibrated on Ahmedabad, so everywhere else counts as unvalidated until it is locally re-tested. Delhi runs its own backtest and ships its own skill number.
+**Fairness and bias.** The model is calibrated on Ahmedabad, so every other region is treated as unvalidated until it is locally retested. Delhi runs its own validation and reports its own accuracy.
 
-**GenAI risk.** The report writer can only restate computed values, in all three languages. Hallucination is blocked by construction, and formatting failures degrade to a deterministic writer instead of crashing.
+**GenAI risk.** The report writer can only restate computed values, in all three output languages. Hallucination is blocked by construction, and formatting failures degrade gracefully instead of crashing.
 
-**Privacy.** No personal data exists anywhere in the system, and all AI inference runs on the user's own machine.
+**Privacy.** No personal data exists anywhere in the system, and all AI inference runs on the user's own machine. Nothing is stored on or sent to an external server.
 
-**Environment.** NNCF compression means no cloud GPU. A tool for planting trees should not burn a data centre.
+**Environment.** Model compression means no cloud GPU: a tool for planting trees should not burn a data centre.
 
-**Still on our list.** We said at the regional round that our traffic light map is hard to read for colour blind users, and it still is. Patterns and text labels are planned. We would rather tell you than hide it.
+**A limitation we disclose.** We noted at the regional round that our traffic light map is difficult for colour blind users, and it still is. Patterns and text labels are planned. We would rather state that than hide it.
 
 ---
 
 ## SDG Alignment
 
-**Primary: SDG 13, Climate Action.** The innovation is prediction. Existing tools observe green cover loss after it happens. Green Vision forecasts it, so a city can act before the trees are gone. And it scales the way non AI approaches cannot: tree surveys and GIS consultants cost lakhs per city and take months, while free satellite data plus a laptop delivers ranked, explained priorities in seconds, for any city on Earth. Progress is measurable by design, with predicted AQI and canopy change per cell re-audited monthly against new satellite passes and 25 year canopy and carbon projections for planted cells. The first measurement in the ground is under way: a partner NGO's plantation drive sited with the tool is **in progress**, inside a municipality publicly committed to five million trees this year.
+**Primary: SDG 13, Climate Action.** The innovation is prediction. Existing tools observe green cover loss after it happens; Green Vision forecasts it, so a city can act before the trees are gone. It also scales the way non AI approaches cannot: tree surveys and GIS consultants cost lakhs per city and take months, while free satellite data plus a laptop delivers ranked, explained priorities in seconds, for any city on Earth. Progress is measurable by design, with predicted air quality and canopy change per cell re-audited monthly against new satellite passes, and 25 year canopy and carbon projections for planted cells. The first measurement in the ground is under way: a partner NGO's plantation drive sited with the tool is **in progress**, inside a municipality publicly committed to five million trees this year.
 
 Also aligned: **SDG 11** (Sustainable Cities and Communities), **SDG 15** (Life on Land), **SDG 9** (Industry, Innovation and Infrastructure).
 
@@ -118,19 +115,4 @@ Also aligned: **SDG 11** (Sustainable Cities and Communities), **SDG 15** (Life 
 
 ## Sources, References and Citations
 
-NASA MOD13Q1 Vegetation Indices, LP DAAC / ORNL DAAC · Open-Meteo Weather and Air Quality APIs · ISRIC SoilGrids v2.0 · ESA WorldCover 2021 v200 · OpenStreetMap contributors (Overpass API) · Esri World Imagery · Copernicus Sentinel-2 L2A via AWS Earth Search · World Resources Institute (2019), urban heat island analysis · IQAir World Air Quality Report (2025) · Ahmedabad Municipal Corporation, "Mission Five Million Trees" launch, July 2026 · Intel OpenVINO toolkit, OpenVINO GenAI API and NNCF (github.com/openvinotoolkit) · scikit-learn and scikit-learn-intelex · Uber H3 (h3geo.org) · Gitelson et al., VARI vegetation index · **Project source: github.com/pratikb1234/GreenVision** (submission) · github.com/Ghost-King-2013/Green-Vision-AI (development)
-
----
----
-
-# BEFORE SUBMITTING, verify these
-
-| # | Item | Status |
-|---|---|---|
-| 1 | GenAI tier ticked matches Stage 2; tools list says Claude Code | VERIFY against the Stage 2 form |
-| 2 | AMC demonstration and NGO drive | IN PROGRESS wording is in the form; when written statements exist, replace those paragraphs with names, dates and verbatim quotes |
-| 3 | Intel i5 and Core Ultra NPU benchmarks | IN PROGRESS wording is in the form; when `EVIDENCE.md` exists, add the measured numbers |
-| 4 | Do not mention Intel Geti, Tiber, or OPEA as things we used | Verified 2026-08-27: Geti hosted trial is gone, Tiber URLs are dead, OPEA honestly not used (docs/intel/) |
-| 5 | Hindi and Gujarati briefs | SHIPPED, greenplan/i18n.py, written every run |
-
-Rule: a claim with no measurement behind it gets deleted, not guessed.
+NASA MOD13Q1 Vegetation Indices, LP DAAC / ORNL DAAC · Open-Meteo Weather and Air Quality APIs · ISRIC SoilGrids v2.0 · ESA WorldCover 2021 · OpenStreetMap contributors · Esri World Imagery · Copernicus Sentinel-2 L2A via AWS Earth Search · World Resources Institute (2019), urban heat island analysis · IQAir World Air Quality Report (2025) · Ahmedabad Municipal Corporation, Mission Five Million Trees, July 2026 · Intel OpenVINO toolkit, OpenVINO GenAI API and NNCF · scikit-learn and Intel Extension for Scikit-learn · Uber H3 · Gitelson et al., VARI vegetation index · Project source: **github.com/pratikb1234/GreenVision**
