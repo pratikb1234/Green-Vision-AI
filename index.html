@@ -387,7 +387,15 @@ window.addEventListener("DOMContentLoaded",()=>{
   initMap(); buildGoals();
   toast("Click anywhere on the map to analyse another spot");
   // Land on a live report, not an empty map: analyse the city centre on load.
-  analyse(CFG.START[0], CFG.START[1]);
+  // Wait for the map to settle its size first, or the zoom-to-area fit
+  // computes against a zero-height container and lands on a world view.
+  map.whenReady(()=>setTimeout(()=>{
+    map.invalidateSize(); analyse(CFG.START[0], CFG.START[1]);
+    // The load-time AOI fit can misfire while layout settles; enforce the
+    // intended city view with an explicit zoom, twice, no bounds math.
+    const enforceView=()=>{ if(map.getZoom()<8){ map.invalidateSize(); map.setView(CFG.START, 12.5, {animate:false}); } };
+    setTimeout(enforceView, 1600); setTimeout(enforceView, 3600);
+  }, 700));
   $("#enterBtn").onclick=()=>{$("#intro").style.display="none";toast("Click anywhere on the map to begin");};
   $$(".viewbtn").forEach(b=>b.onclick=()=>setView(b.dataset.view));
   $("#zoomIn").onclick=()=>map.zoomIn();
@@ -1229,7 +1237,17 @@ function drawAOI(aoi, fit) {
     })
   }).addTo(aoiLayer);
 
-  if (fit !== false) map.fitBounds(ring.getBounds().pad(0.08), { animate: true });
+  if (fit !== false) {
+    map.fitBounds(ring.getBounds().pad(0.08), { animate: true });
+    // If the fit computed against a not-yet-laid-out container (page load),
+    // the zoom lands absurdly far out; re-measure and fit again.
+    setTimeout(() => {
+      if (map.getZoom() < 8) {
+        map.invalidateSize();
+        map.fitBounds(ring.getBounds().pad(0.08), { animate: false });
+      }
+    }, 450);
+  }
 }
 
 function clearAOI() {
