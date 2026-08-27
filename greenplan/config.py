@@ -142,6 +142,9 @@ class ModelCfg:
 class RunCfg:
     seed: int = 42
     outputs_dir: str = "outputs"
+    # Crew-facing one-page brief translations (greenplan/i18n.py). Templated
+    # by hand, not machine-translated; [] disables them.
+    brief_languages: list = field(default_factory=lambda: ["hi", "gu"])
 
 
 @dataclass

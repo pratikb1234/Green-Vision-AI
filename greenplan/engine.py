@@ -565,6 +565,42 @@ def _write_outputs(
     ]
     (out_dir / "planting_brief.txt").write_text("\n".join(brief), encoding="utf-8")
     outs = [csv_path.name, geojson_path.name, "planting_brief.txt"]
+
+    # Crew-facing one-page summaries in Indian languages (templated, offline —
+    # see greenplan/i18n.py for why they are written by hand, not translated).
+    from . import i18n  # noqa: PLC0415
+
+    crew_zones = []
+    for r in ranked.head(cfg.mcda.top_n).itertuples():
+        try:
+            lat, lon = cell_center(r.zone)
+        except Exception:
+            lat, lon = float("nan"), float("nan")
+        n_zone_sites = 0
+        if has_sites:
+            n_zone_sites = len(sites.sites_for_zone(r.zone, cfg.sites.max_sites_per_zone))
+        crew_zones.append(
+            {
+                "rank": int(r.rank),
+                "zone": r.zone,
+                "lat": lat,
+                "lon": lon,
+                "aqi_latest": float(r.aqi_latest),
+                "aqi_pred_delta": float(r.aqi_pred_delta),
+                "ndvi_slope": float(r.ndvi_slope),
+                "species": rec_by_zone.get(r.zone, {}).get("species", []),
+                "n_sites": n_zone_sites,
+            }
+        )
+    for lang in cfg.run.brief_languages:
+        if lang not in i18n.SUPPORTED:
+            log.warning("no crew-brief template for language %r — skipped", lang)
+            continue
+        name = f"planting_brief.{lang}.txt"
+        (out_dir / name).write_text(
+            i18n.crew_brief(lang, cfg.city.name, crew_zones), encoding="utf-8"
+        )
+        outs.append(name)
     if sites_path is not None:
         outs.append(sites_path.name)
     log.info("wrote %s", ", ".join(outs))
