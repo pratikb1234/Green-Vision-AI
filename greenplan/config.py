@@ -120,6 +120,12 @@ class ModelCfg:
     model_dir: str = "models/openvino/qwen2.5-1.5b-instruct-int4-ov"
     device: str = "CPU"           # CPU | GPU | NPU | AUTO — any OpenVINO device
     max_new_tokens: int = 2048
+    # NPU only. The NPU pipeline is compiled with static shapes: prompts longer
+    # than this are an error, not a slowdown, and its kv-cache is fixed at
+    # npu_max_prompt_len + max_new_tokens tokens. The GenAI default (1024)
+    # is smaller than this engine's recommend prompts. Ignored on CPU/GPU/AUTO,
+    # whose pipelines take dynamic shapes.
+    npu_max_prompt_len: int = 4096
     # Chat template. "chatml" suits Qwen/Yi/most OpenVINO-converted instruct
     # models; "llama3" suits Llama-3.x; "tokenizer" defers to the model's own
     # template when the bundled tokenizer ships one.
