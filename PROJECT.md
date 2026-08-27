@@ -158,17 +158,18 @@ clicks send coordinates to Open-Meteo, Overpass, Nominatim and Esri. So the clai
 
 Everything downstream of `config/<city>.yaml` is city-agnostic, and every data source
 (NASA, Open-Meteo, SoilGrids, OSM, Sentinel-2) is global — the recipe works for any
-city on Earth with a bounding box. **Delhi is already being stood up**: real AQI
-(10,419 rows, 2023-01 → 2026-06), Sentinel-2 10 m cell NDVI, and 3,392 candidate
-planting sites are exported; the MODIS NDVI export and the full recommend run are the
-remaining steps. Crucially, each city's run backtests *itself*, so each city ships
+city on Earth with a bounding box. **Delhi is live end-to-end**: real AQI
+(10,419 rows, 2023-01 to 2026-06), 42 months of MODIS NDVI (144 cells), SoilGrids,
+Sentinel-2 10 m NDVI with 3,390 candidate planting sites, and a completed recommend
+run with Delhi's own backtest (memory_helped: true, skill +0.03) and its own
+species picks. Crucially, each city's run backtests *itself*, so each city ships
 with its own measured skill — never Ahmedabad's borrowed one.
 
 ## 7. Technology stack
 
 - **Engine:** Python; H3 hexagonal grid (res 7); pluggable adapters
   (`mock` / `csv` / custom); MCDA ranking; backtest-driven JSONL memory;
-  Theil–Sen + seasonal statistical forecaster; PyTorch-trained MLP challenger
+  Theil–Sen + seasonal statistical forecaster; scikit-learn-trained MLP and random-forest challengers
   exported to ONNX; OpenVINO GenAI runtime with INT4 NNCF compression;
   providers `hybrid | openvino | nvidia | openrouter | mock`; CLI + server;
   Dockerfile for containerised runs.
