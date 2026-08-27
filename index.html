@@ -2150,7 +2150,7 @@ function drawStudioPanel() {
     <div class="gv-or3d"><span>2D map plan</span></div>
     <div class="gv-plotbar">
       <div><b>${fmt(round(d.plot.area_m2))} m&sup2;</b><span>${round(d.plot.area_m2 / 10000, 2)} ha plot</span></div>
-      <div><b>${d.items.length}</b><span>elements</span></div>
+      <div><b id="gvElCount">${d.items.length}</b><span>elements</span></div>
       <button class="gv-mini" id="gvRedrawPlot">Redraw plot</button>
     </div>
 
@@ -2309,6 +2309,8 @@ function placeItem(ll) {
   }
   drawItem(GV.design.items[GV.design.items.length - 1], GV.design.items.length - 1);
   touchDesign();
+  const ec = $("#gvElCount");
+  if (ec) ec.textContent = GV.design.items.length;
   const b = $(`[data-tree="${activeTool.ref}"]`) || $(`[data-el="${activeTool.ref}"]`);
   if (b) {
     let n = b.querySelector("b");
@@ -3654,7 +3656,8 @@ async function boot() {
 /* Engines exposed so they can be run headless — in a Node harness, or
    from the Python side via a JS runtime — without a map or a DOM.
    test_studio.js uses exactly this surface. */
-GV.engines = { computeCost, reviewDesign, project, speciesList, ringAreaM2, ELEMENTS, TREE_ECON };
+GV.engines = { computeCost, reviewDesign, project, speciesList, ringAreaM2, ELEMENTS, TREE_ECON,
+               inr, uid, store, logHistory };
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
 else boot();
@@ -3677,6 +3680,10 @@ else boot();
      default location so "Design" always opens something.
    - Hand-rolled orbit + raycast (no external OrbitControls dependency).
    ===================================================================== */
+
+/* The cost/review engines live inside the studio IIFE above; they reach
+   this section only through the GV.engines surface. */
+const { computeCost, reviewDesign, project, inr, uid, store, logHistory } = GV.engines;
 
 GV.builder = { open: openBuilder, placed: [], plotM: 100 };
 
