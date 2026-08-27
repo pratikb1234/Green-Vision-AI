@@ -338,9 +338,12 @@ class OpenVINOClient:
             system=system, user=user
         )
 
-    def _generate(self, system: str, user: str) -> str:
+    def _generate(self, system: str, user: str, max_new_tokens: int | None = None) -> str:
         gen = self._genai.GenerationConfig()
-        gen.max_new_tokens = self.cfg.max_new_tokens
+        # A caller that knows its reply is short (e.g. a 2-zone recommend
+        # chunk) caps generation; on CPU an uncapped 2048-token ramble is the
+        # difference between a 90 s attempt and a 10 min one.
+        gen.max_new_tokens = max_new_tokens or self.cfg.max_new_tokens
         # Greedy decoding at temperature 0 — strict-JSON output is a parsing
         # task, not a creative one, and sampling only adds failure modes.
         if self.cfg.temperature > 0:
@@ -356,6 +359,7 @@ class OpenVINOClient:
         user: str,
         validate: Callable[[dict[str, Any]], None] | None = None,
         list_key: str | None = None,
+        max_new_tokens: int | None = None,
     ) -> dict[str, Any]:
         """Mirrors OpenRouterClient.chat_json, including the re-ask loop. A
         small local model needs that loop more often than a hosted one, which
@@ -367,7 +371,7 @@ class OpenVINOClient:
         last_err = "no attempt made"
         sys_prompt, usr_prompt = system, user
         for _ in range(self.cfg.json_repair_attempts):
-            text = self._generate(sys_prompt, usr_prompt)
+            text = self._generate(sys_prompt, usr_prompt, max_new_tokens)
             try:
                 obj = extract_json(text, allow_list=list_key is not None)
                 if isinstance(obj, list):
@@ -469,11 +473,15 @@ class ReasoningModel:
                         f"table's `common` column; valid picks were {picked}"
                     )
 
+        kwargs: dict[str, Any] = {"list_key": "zones"}
+        if isinstance(self.client, OpenVINOClient):
+            # ~150 tokens of justification + species per zone, plus wrapper
+            kwargs["max_new_tokens"] = 220 * len(ranked_rows) + 120
         obj = self.client.chat_json(
             prompts.RECOMMEND_SYSTEM,
             prompts.recommend_user(ranked_rows, lessons, kb_markdown_table()),
             _validate,
-            list_key="zones",
+            **kwargs,
         )
         by_zone = {z["zone"]: z for z in obj["zones"]}
         out = []
